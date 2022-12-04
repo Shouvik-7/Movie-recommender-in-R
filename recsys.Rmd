@@ -1,0 +1,164 @@
+---
+title: "recommendersystem"
+author: "Shouvik"
+date: '2022-12-04'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(recommenderlab)
+library(reshape2)
+library(data.table)
+library(ggplot2)
+library(stringr)
+library(superml)
+library(tidyverse)
+library(lsa)
+```
+
+```{r}
+movie_data <- read.csv('movies.csv')
+head(movie_data)
+```
+
+```{r}
+movie_data <- movie_data %>% select(,c('movie_id','title','genres','keywords','cast','crew'))
+```
+
+```{r}
+head(movie_data)
+```
+
+```{r}
+movie_data$tags <- paste(movie_data$genres,movie_data$keywords,movie_data$cast,movie_data$crew,sep=" ")
+```
+
+
+
+
+```{r}
+head(movie_data)
+
+```
+
+```{r}
+movie_data$tags <- sapply(movie_data$tags, function (x) tolower(x))
+head(movie_data)
+```
+
+
+
+
+
+```{r}
+cfv <- CountVectorizer$new(max_features = 500, remove_stopwords = TRUE)
+
+# generate the matrix
+cf_mat <- cfv$fit_transform(movie_data$tags)
+
+head(cf_mat)
+```
+
+```{r}
+dim(cf_mat)
+
+```
+```{r}
+cosine(cf_mat[1,],cf_mat[3,])
+```
+
+```{r}
+recommend <- function(moviename) {
+  mindex <- which(movie_data$title==moviename)
+  mvector <- cf_mat[mindex,]
+  max1 = 0
+  index1 = 0
+  max2 = 0
+  index2 = 0
+  max3 = 0
+  index3 = 0
+  max4 = 0
+  index4 = 0
+  max5 = 0
+  index5 = 0
+  for(row in 1:nrow(cf_mat)) {
+  
+    val = cosine(mvector,cf_mat[row,])
+  
+    if(is.na(val)) {
+      max1 = max1
+    }
+    else if(val > max1 & val<1) {
+      max1 = val
+      index1 = row
+    }
+    else if(val > max2 & val<1) {
+      max2 = val
+      index2 = row
+    }
+    else if(val > max3 & val<1) {
+      max3 = val
+      index3 = row
+    }
+    else if(val > max4 & val<1) {
+      max4 = val
+      index4 = row
+    }
+    else if(val > max5 & val<1) {
+      max5 = val
+      index5 = row
+    }
+  }
+  
+  print(movie_data[index1,])
+  print(movie_data[index2,])
+  print(movie_data[index3,])
+  print(movie_data[index4,])
+  print(movie_data[index5,])
+}
+```
+
+```{r}
+recommend('Quantum of Solace')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
