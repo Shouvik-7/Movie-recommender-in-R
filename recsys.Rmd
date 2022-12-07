@@ -9,6 +9,11 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+
+install tm, wordcloud
+
+
 ```{r}
 library(recommenderlab)
 library(reshape2)
@@ -18,6 +23,8 @@ library(stringr)
 library(superml)
 library(tidyverse)
 library(lsa)
+library(tm)
+library(wordcloud)
 ```
 
 ```{r}
@@ -71,6 +78,14 @@ dim(cf_mat)
 cosine(cf_mat[1,],cf_mat[3,])
 ```
 
+
+
+
+
+
+
+
+
 ```{r}
 recommend <- function(moviename) {
   mindex <- which(movie_data$title==moviename)
@@ -123,16 +138,26 @@ recommend <- function(moviename) {
 ```
 
 ```{r}
-recommend('Quantum of Solace')
+recommend('Batman Begins')
 ```
 
 
+```{r}
+freq <- colSums(cf_mat)
+freqdf <- data.frame(freq)
+freqdf2 <- cbind(word = rownames(freqdf), freqdf)
+head(freqdf2)
+```
 
 
+```{r}
+wordcloud(freqdf2$word, freqdf$freq, max.words = 250, colors= brewer.pal(8, "Dark2"))
+```
 
 
-
-
+```{r}
+barplot(head(freqdf2)$freq, names.arg=head(freqdf2)$word, xlab="word",ylab="freq",density=10)
+```
 
 
 
