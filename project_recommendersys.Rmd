@@ -1,0 +1,219 @@
+---
+title: "Recommender System for Movie Recommendations"
+author: "By: Shouvik, Natalia, Shanya"
+date: 'Fall 2022'
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, echo = TRUE)
+```
+
+**[Click this Link to Access Project GitHub](https://github.com/Shouvik-7/Movie-recommender-in-R)**
+
+NOTE: For successful execution of the code below, the user will require the following packages:
+`recommenderlab`
+`reshape2`
+`data.table`
+`ggplot2`
+`stringr`
+`superml`
+`tidyverse`
+`lsa`
+`tm`
+`wordcloud`
+`RCurl`
+`lemon`
+
+```{r, include=FALSE}
+library(recommenderlab)
+library(reshape2)
+library(data.table)
+library(ggplot2)
+library(stringr)
+library(superml)
+library(tidyverse)
+library(lsa)
+library(tm)
+library(wordcloud)
+library(RCurl)
+library(lemon)
+knit_print.data.frame <- lemon_print
+```
+
+
+Today, easy-access, streaming services offer immediate gratification through an on-demand, personalized viewing experience. This is one of many recommend systems the average individual encounters on a daily bases... but how do they work? The following report, offers a small glimpse into the logic behind these complex customization features. 
+
+The code and written walk-through below constructs a recommender system for movies using the well known, TMDB Movies dataset. This data was obtained from Kaggle and cleaned in Python. All preprocessing steps that are relevant to this project were included below. For the purpose of creating a clear, general framework for much more complex recommender systems, a fairly simple dataset was chosen. The selected dataset contains 4806 objects (each representing a movie) with 7 columns containing descriptive characteristic of each movie.
+
+## Loading the data 
+
+For reproducability without the need for downloading or transferring data, we will import the movies dataset directly from a public GitHub repository. After getting the raw data url we will use the `read.csv` function to import the data into the notebook. We use the `head` function to show only the top few rows to confirm the data is in the expected form. 
+
+NOTE: for all other progress checking print-outs, we will only display 1-2 rows to reduce crowding and increase readability 
+
+```{r,render=lemon_print}
+gh_url <- getURL("https://raw.githubusercontent.com/Shouvik-7/Movie-recommender-in-R/main/movies.csv")
+movie_data <- read.csv(text = gh_url)
+movie_data <- data.frame(movie_data)
+head(movie_data)
+```
+
+## Selecting relevant features
+
+The above data contains many unneeded features such as characteristics and movie synopsis. First we isolate the necesary attributes for a simplistic movie recommend system. Note that recommender systems can range in complexity based on the amount of attributes considered, however the following system offers a simplistic, general example of the basic system framework. We use the `select` function from the `tidyverse` package to select the features that are important to constructing the recommender system. In this case, the features of interest are `movie_id`, `title`, `genres`, `keywords`, `cast`, `crew`.
+
+```{r}
+movie_data <- movie_data %>% select(,c('movie_id','title','genres','keywords','cast','crew'))
+```
+
+```{r,render=lemon_print, echo=FALSE}
+head(movie_data, 1)
+```
+
+## Creating tags
+
+Next, we create condense all of the attributes of interest into a new, single column called `tags`. This column now contains a concatenation of the features `genres`, `keywords`, `cast`, `crew`, separated by a space (" "). 
+
+```{r}
+movie_data$tags <- paste(movie_data$genres,movie_data$keywords,movie_data$cast,movie_data$crew,sep=" ")
+```
+
+Additionally, to ensure consistency, all of the tags should be lower case. This prevents accidents such as failure to recognize matching values due to difference in case sensitivity. For this manipulation we use the functions `sapply` from `tidyverse` package and `tolower`applied to the `tags` column.
+
+```{r, render=lemon_print, echo=FALSE}
+movie_data$tags <- sapply(movie_data$tags, function (x) tolower(x))
+head(movie_data, 2)
+```
+
+## Vectorizing the data to a sparse matrix
+
+After pre-processing the data, we can generate a bag of words model and return a sparse matrix consisting of token counts. This task is made simple by using the `CounterVectorize$new()` function with the following arguments: 
+
+**`min_df`: numeric** i.e. When building the vocabulary ignore terms that have a document frequency strictly lower than the given threshold (value lies between 0 and 1)
+
+**`max_df`: numeric** i.e. When building the vocabulary ignore terms that have a document frequency strictly higher than the given threshold (value lies between 0 and 1)
+
+**`max_features`: integer** i.e. Build a vocabulary that only considers the top max_features ordered by term frequency across the corpus
+
+**`ngram_range`: vector** i.e. The lower and upper boundary of the range of n-values for different word n-grams or character n-grams to be extracted. All values of n such such that min_n <= n <= max_n will be used. For example an ngram_range of c(1, 1) means only unigrams, c(1, 2) means unigrams and bigrams, and c(2, 2) means only bigrams.
+
+**`regex`: character** i.e. regex expression to use for text cleaning.
+
+**`remove_stopwords`: list** i.e. A list of stopwords to use. By default it uses its inbuilt list of standard English stopwords
+
+**`split`: character** i.e Splitting criteria for strings (default: " ")
+
+**`lowercase`: logical** i.e. convert all characters to lowercase before tokenizing (default: TRUE)
+
+```{r}
+cfv <- CountVectorizer$new(max_features = 500, remove_stopwords = TRUE)
+# generate the matrix
+cf_mat <- cfv$fit_transform(movie_data$tags)
+#head(cf_mat)
+```
+
+Now we should have a sparse matrix consisting of token counts. The print out of the above matrix has been excluded do to the fact that it is cumbersome and difficult to read. However, to see the matrix in greater detail, feel free to un-comment the print out function in the above code chunk.
+The following code checks the dimension of this matrix using the `dim` function.
+
+```{r}
+dim(cf_mat)
+```
+
+Next, we implement the `cosine()` function to calculate the distance between two vector points.
+
+```{r}
+cosine(cf_mat[1,],cf_mat[3,])
+```
+
+## Creating a function to Recommend movies
+
+Finally, we create a function `recommend` with the argument `moviename`. 
+When a movie title is entered into this function, it outputs five data frames with the recommended movie names based on argument similarities. It does this by using the above `cosine()` function. The `cosine()` similarity is used as a metric to find the distance between the neighbors (in this case, movies). In text based recommender systems this is often used to find the similarity of texts in a document. 
+In the function below, we aimg to find the five closest vector values to that of the input value. If the cosine value is 0, this is the optimal condition. In this case, `max1` would remain `max1` = 0. If val (the cosine distance between index of input movie and index in iteration) is between 0 and 1, `index1` becomes the row in iteration. Similarly the five closest values of cosine distance will be recorded and the indexes corresponding to those five closest values will be stored as `index1`, `index2`, `index3`, `index4` and `index5` respectively. See the following code for clarity:
+
+
+```{r, render=lemon_print}
+recommend <- function(moviename) {
+  mindex <- which(movie_data$title==moviename)
+  mvector <- cf_mat[mindex,]
+  max1 = 0
+  index1 = 0
+  max2 = 0
+  index2 = 0
+  max3 = 0
+  index3 = 0
+  max4 = 0
+  index4 = 0
+  max5 = 0
+  index5 = 0
+  for(row in 1:nrow(cf_mat)) {
+  
+    val = cosine(mvector,cf_mat[row,])
+  
+    if(is.na(val)) {
+      max1 = max1
+    }
+    else if(val > max1 & val<1) {
+      max1 = val
+      index1 = row
+    }
+    else if(val > max2 & val<1) {
+      max2 = val
+      index2 = row
+    }
+    else if(val > max3 & val<1) {
+      max3 = val
+      index3 = row
+    }
+    else if(val > max4 & val<1) {
+      max4 = val
+      index4 = row
+    }
+    else if(val > max5 & val<1) {
+      max5 = val
+      index5 = row
+    }
+  }
+  
+  return(do.call("rbind", list(movie_data[index1,], movie_data[index2,], movie_data[index3,], movie_data[index4,], movie_data[index5,])))
+
+}
+```
+
+## Testing the `recommend` function
+
+```{r, render=lemon_print}
+recommend('Batman Begins')
+```
+
+## Visualizing data set
+
+To see what words are most commonly found in the tags, we use the `colSums` function followed by `cbind` to join the frequency with its associated word. 
+
+```{r,render=lemon_print}
+freq <- colSums(cf_mat)
+freqdf <- data.frame(freq)
+freqdf2 <- cbind(word = rownames(freqdf), freqdf)
+head(freqdf2)
+```
+
+Lastly, we visualize the data above to offer non-technical insight into the bases of the output recommendations. This can be done by generating a wordcloud through the `wordcloud` function from the `tm` package. While this might seem trivial, proper transparency is a crucial responsibility for data scientists. 
+
+In today's modern age, people are quick to blind trust in technology. However, many recommendation systems are black boxes for the general public. While the technical breakdown above holds zero relevance to most users, non-technical transparency (such as the visualization below) provides some level of understanding as to what premise the recommendations are made on. 
+
+```{r}
+wordcloud(freqdf2$word, freqdf$freq, max.words = 250, colors= brewer.pal(8, "Dark2"))
+```
+
+Another convenient way to express the data from `freqdf2` is to use a barplot from base R using the `barplot` function.
+
+```{r}
+barplot(head(freqdf2)$freq, names.arg=head(freqdf2)$word, xlab="word",ylab="freq",density=10)
+```
+
+## Acknowledgemnt of Bias in Recommender Systems
+
+Many recommendation systems hold far greater weight than simple movie suggestions, but transparency and acknowledgment combat biases and possible repercussions that inevitably result from human-made models. In the creation of any recommender system, the architect makes some decision(s) on how to formulate relationships that ultimately lead to recommendations. This inevitably introduces bias. Therefore, as stated above, greater transparency and the inclusion of confidence metrics helps in reducing potential harm. 
